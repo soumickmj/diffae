@@ -124,58 +124,49 @@ class GaussianDiffusionBeatGans:
 
         terms = {'x_t': x_t}
 
-        if self.loss_type in [
-                LossType.mse,
-                LossType.l1,
-        ]:
-            with autocast(self.conf.fp16):
-                # x_t is static wrt. to the diffusion process
-                model_forward = model.forward(x=x_t.detach(),
-                                              t=self._scale_timesteps(t),
-                                              x_start=x_start.detach(),
-                                              **model_kwargs)
-            model_output = model_forward.pred
-
-            _model_output = model_output
-            if self.conf.train_pred_xstart_detach:
-                _model_output = _model_output.detach()
-            # get the pred xstart
-            p_mean_var = self.p_mean_variance(
-                model=DummyModel(pred=_model_output),
-                # gradient goes through x_t
-                x=x_t,
-                t=t,
-                clip_denoised=False)
-            terms['pred_xstart'] = p_mean_var['pred_xstart']
-
-            # model_output = model(x_t, self._scale_timesteps(t), **model_kwargs)
-
-            target_types = {
-                ModelMeanType.eps: noise,
-            }
-            target = target_types[self.model_mean_type]
-            assert model_output.shape == target.shape == x_start.shape
-
-            if self.loss_type == LossType.mse:
-                if self.model_mean_type == ModelMeanType.eps:
-                    # (n, c, h, w) => (n, )
-                    terms["mse"] = mean_flat((target - model_output)**2)
-                else:
-                    raise NotImplementedError()
-            elif self.loss_type == LossType.l1:
-                # (n, c, h, w) => (n, )
-                terms["mse"] = mean_flat((target - model_output).abs())
-            else:
-                raise NotImplementedError()
-
-            if "vb" in terms:
-                # if learning the variance also use the vlb loss
-                terms["loss"] = terms["mse"] + terms["vb"]
-            else:
-                terms["loss"] = terms["mse"]
-        else:
+        if self.loss_type not in [LossType.mse, LossType.l1]:
             raise NotImplementedError(self.loss_type)
 
+        with autocast(self.conf.fp16):
+            # x_t is static wrt. to the diffusion process
+            model_forward = model.forward(x=x_t.detach(),
+                                          t=self._scale_timesteps(t),
+                                          x_start=x_start.detach(),
+                                          **model_kwargs)
+        model_output = model_forward.pred
+
+        _model_output = model_output
+        if self.conf.train_pred_xstart_detach:
+            _model_output = _model_output.detach()
+        # get the pred xstart
+        p_mean_var = self.p_mean_variance(
+            model=DummyModel(pred=_model_output),
+            # gradient goes through x_t
+            x=x_t,
+            t=t,
+            clip_denoised=False)
+        terms['pred_xstart'] = p_mean_var['pred_xstart']
+
+        # model_output = model(x_t, self._scale_timesteps(t), **model_kwargs)
+
+        target_types = {
+            ModelMeanType.eps: noise,
+        }
+        target = target_types[self.model_mean_type]
+        assert model_output.shape == target.shape == x_start.shape
+
+        if (
+            self.loss_type == LossType.mse
+            and self.model_mean_type == ModelMeanType.eps
+        ):
+            # (n, c, h, w) => (n, )
+            terms["mse"] = mean_flat((target - model_output)**2)
+        elif self.loss_type == LossType.mse or self.loss_type != LossType.l1:
+            raise NotImplementedError()
+        else:
+            # (n, c, h, w) => (n, )
+            terms["mse"] = mean_flat((target - model_output).abs())
+        terms["loss"] = terms["mse"] + terms["vb"] if "vb" in terms else terms["mse"]
         return terms
 
     def sample(self,
@@ -332,9 +323,7 @@ class GaussianDiffusionBeatGans:
         def process_xstart(x):
             if denoised_fn is not None:
                 x = denoised_fn(x)
-            if clip_denoised:
-                return x.clamp(-1, 1)
-            return x
+            return x.clamp(-1, 1) if clip_denoised else x
 
         if self.model_mean_type in [
                 ModelMeanType.eps,
@@ -410,9 +399,9 @@ class GaussianDiffusionBeatGans:
         This uses the conditioning strategy from Sohl-Dickstein et al. (2015).
         """
         gradient = cond_fn(x, self._scale_timesteps(t), **model_kwargs)
-        new_mean = (p_mean_var["mean"].float() +
-                    p_mean_var["variance"] * gradient.float())
-        return new_mean
+        return (
+            p_mean_var["mean"].float() + p_mean_var["variance"] * gradient.float()
+        )
 
     def condition_score(self, cond_fn, p_mean_var, x, t, model_kwargs=None):
         """
@@ -783,13 +772,7 @@ class GaussianDiffusionBeatGans:
 
         for i in indices:
 
-            if isinstance(model_kwargs, list):
-                # index dependent model kwargs
-                # (T-1, ..., 0)
-                _kwargs = model_kwargs[i]
-            else:
-                _kwargs = model_kwargs
-
+            _kwargs = model_kwargs[i] if isinstance(model_kwargs, list) else model_kwargs
             t = th.tensor([i] * len(img), device=device)
             with th.no_grad():
                 out = self.ddim_sample(
@@ -1038,11 +1021,14 @@ def normal_kl(mean1, logvar1, mean2, logvar2):
     Shapes are automatically broadcasted, so batches can be compared to
     scalars, among other use cases.
     """
-    tensor = None
-    for obj in (mean1, logvar1, mean2, logvar2):
-        if isinstance(obj, th.Tensor):
-            tensor = obj
-            break
+    tensor = next(
+        (
+            obj
+            for obj in (mean1, logvar1, mean2, logvar2)
+            if isinstance(obj, th.Tensor)
+        ),
+        None,
+    )
     assert tensor is not None, "at least one argument must be a Tensor"
 
     # Force variances to be Tensors. Broadcasting helps convert scalars to

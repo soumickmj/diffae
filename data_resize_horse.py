@@ -20,21 +20,14 @@ def resize_and_convert(img, size, resample, quality=100):
     img = trans_fn.center_crop(img, size)
     buffer = BytesIO()
     img.save(buffer, format="webp", quality=quality)
-    val = buffer.getvalue()
-
-    return val
+    return buffer.getvalue()
 
 
 def resize_multiple(img,
                     sizes=(128, 256, 512, 1024),
                     resample=Image.LANCZOS,
                     quality=100):
-    imgs = []
-
-    for size in sizes:
-        imgs.append(resize_and_convert(img, size, resample, quality))
-
-    return imgs
+    return [resize_and_convert(img, size, resample, quality) for size in sizes]
 
 
 def resize_worker(idx, img, sizes, resample):
@@ -52,8 +45,7 @@ class ConvertDataset(Dataset):
 
     def __getitem__(self, index):
         img, _ = self.data[index]
-        bytes = resize_and_convert(img, 256, Image.LANCZOS, quality=90)
-        return bytes
+        return resize_and_convert(img, 256, Image.LANCZOS, quality=90)
 
 
 if __name__ == "__main__":
@@ -83,15 +75,15 @@ if __name__ == "__main__":
             for batch in loader:
                 with env.begin(write=True) as txn:
                     for img in batch:
-                        key = f"{256}-{str(i).zfill(7)}".encode("utf-8")
+                        key = f"256-{str(i).zfill(7)}".encode("utf-8")
                         # print(key)
                         txn.put(key, img)
                         i += 1
                         progress.update()
-                # if i == 1000:
-                #     break
-                # if total == len(imgset):
-                #     break
+                            # if i == 1000:
+                            #     break
+                            # if total == len(imgset):
+                            #     break
 
         with env.begin(write=True) as txn:
             txn.put("length".encode("utf-8"), str(i).encode("utf-8"))

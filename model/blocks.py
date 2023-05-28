@@ -222,21 +222,13 @@ class ResBlock(TimestepBlock):
         if self.conf.use_condition:
             # it's possible that the network may not receieve the time emb
             # this happens with autoenc and setting the time_at
-            if emb is not None:
-                emb_out = self.emb_layers(emb).type(h.dtype)
-            else:
-                emb_out = None
-
+            emb_out = self.emb_layers(emb).type(h.dtype) if emb is not None else None
             if self.conf.two_cond:
                 # it's possible that the network is two_cond
                 # but it doesn't get the second condition
                 # in which case, we ignore the second condition
                 # and treat as if the network has one condition
-                if cond is None:
-                    cond_out = None
-                else:
-                    cond_out = self.cond_emb_layers(cond).type(h.dtype)
-
+                cond_out = None if cond is None else self.cond_emb_layers(cond).type(h.dtype)
                 if cond_out is not None:
                     while len(cond_out.shape) < len(h.shape):
                         cond_out = cond_out[..., None]
@@ -296,12 +288,11 @@ def apply_conditions(
             # special case: the condition is not provided
             a = None
             b = None
+        elif each.shape[1] == in_channels * 2:
+            a, b = th.chunk(each, 2, dim=1)
         else:
-            if each.shape[1] == in_channels * 2:
-                a, b = th.chunk(each, 2, dim=1)
-            else:
-                a = each
-                b = None
+            a = each
+            b = None
         scale_shifts[i] = (a, b)
 
     # condition scale bias could be a list

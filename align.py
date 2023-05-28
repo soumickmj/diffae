@@ -25,7 +25,7 @@ def image_align(src_file,
     # https://github.com/NVlabs/ffhq-dataset/blob/master/download_ffhq.py
 
     lm = np.array(face_landmarks)
-    lm_chin = lm[0:17]  # left-right
+    lm_chin = lm[:17]
     lm_eyebrow_left = lm[17:22]  # left-right
     lm_eyebrow_right = lm[22:27]  # left-right
     lm_nose = lm[27:31]  # top-down
@@ -81,7 +81,7 @@ def image_align(src_file,
                 img.size[0]), min(crop[3] + border, img.size[1]))
     if crop[2] - crop[0] < img.size[0] or crop[3] - crop[1] < img.size[1]:
         img = img.crop(crop)
-        quad -= crop[0:2]
+        quad -= crop[:2]
 
     # Pad.
     pad = (int(np.floor(min(quad[:, 0]))), int(np.floor(min(quad[:, 1]))),
@@ -134,11 +134,10 @@ class LandmarksDetector:
         dets = self.detector(img, 1)
 
         for detection in dets:
-            face_landmarks = [
+            yield [
                 (item.x, item.y)
                 for item in self.shape_predictor(img, detection).parts()
             ]
-            yield face_landmarks
 
 
 def unpack_bz2(src_path):
@@ -153,7 +152,7 @@ def unpack_bz2(src_path):
 
 
 def work_landmark(raw_img_path, img_name, face_landmarks):
-    face_img_name = '%s.png' % (os.path.splitext(img_name)[0], )
+    face_img_name = f'{os.path.splitext(img_name)[0]}.png'
     aligned_face_path = os.path.join(ALIGNED_IMAGES_DIR, face_img_name)
     if os.path.exists(aligned_face_path):
         return

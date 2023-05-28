@@ -221,17 +221,15 @@ class BeatGANsUNetModel(nn.Module):
                 # print('pop:', ich)
                 layers = [
                     ResBlockConfig(
-                        # only direct channels when gated
                         channels=ch + ich,
                         emb_channels=conf.embed_channels,
                         dropout=conf.dropout,
                         out_channels=int(conf.model_channels * mult),
                         dims=conf.dims,
                         use_checkpoint=conf.use_checkpoint,
-                        # lateral channels are described here when gated
-                        has_lateral=True if ich > 0 else False,
+                        has_lateral=ich > 0,
                         lateral_channels=None,
-                        **kwargs,
+                        **kwargs
                     ).make_model()
                 ]
                 ch = int(conf.model_channels * mult)
@@ -318,7 +316,7 @@ class BeatGANsUNetModel(nn.Module):
         h = x.type(self.dtype)
         k = 0
         for i in range(len(self.input_num_blocks)):
-            for j in range(self.input_num_blocks[i]):
+            for _ in range(self.input_num_blocks[i]):
                 h = self.input_blocks[k](h, emb=emb)
                 # print(i, j, h.shape)
                 hs[i].append(h)
@@ -328,7 +326,7 @@ class BeatGANsUNetModel(nn.Module):
         h = self.middle_block(h, emb=emb)
         k = 0
         for i in range(len(self.output_num_blocks)):
-            for j in range(self.output_num_blocks[i]):
+            for _ in range(self.output_num_blocks[i]):
                 # take the lateral connection from the same layer (in reserve)
                 # until there is no more, use None
                 try:
@@ -522,17 +520,13 @@ class BeatGANsEncoderModel(nn.Module):
         h_2d = h
         h = self.out(h)
 
-        if return_2d_feature:
-            return h, h_2d
-        else:
-            return h
+        return (h, h_2d) if return_2d_feature else h
 
     def forward_flatten(self, x):
         """
         transform the last 2d feature into a flatten vector
         """
-        h = self.out(x)
-        return h
+        return self.out(x)
 
 
 class SuperResModel(BeatGANsUNetModel):

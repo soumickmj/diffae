@@ -41,9 +41,7 @@ class LitModel(pl.LightningModule):
         self.ema_model.requires_grad_(False)
         self.ema_model.eval()
 
-        model_size = 0
-        for param in self.model.parameters():
-            model_size += param.data.nelement()
+        model_size = sum(param.data.nelement() for param in self.model.parameters())
         print('Model params: %.2f M' % (model_size / 1024 / 1024))
 
         self.sampler = conf.make_diffusion_conf().make_sampler()
@@ -141,8 +139,7 @@ class LitModel(pl.LightningModule):
     def encode(self, x):
         # TODO:
         assert self.conf.model_type.has_autoenc()
-        cond = self.ema_model.encoder.forward(x)
-        return cond
+        return self.ema_model.encoder.forward(x)
 
     def encode_stochastic(self, x, cond, T=None):
         if T is None:
@@ -156,14 +153,10 @@ class LitModel(pl.LightningModule):
 
     def forward(self, noise=None, x_start=None, ema_model: bool = False):
         with amp.autocast(False):
-            if ema_model:
-                model = self.ema_model
-            else:
-                model = self.model
-            gen = self.eval_sampler.sample(model=model,
-                                           noise=noise,
-                                           x_start=x_start)
-            return gen
+            model = self.ema_model if ema_model else self.model
+            return self.eval_sampler.sample(
+                model=model, noise=noise, x_start=x_start
+            )
 
     def setup(self, stage=None) -> None:
         """
@@ -193,10 +186,7 @@ class LitModel(pl.LightningModule):
         conf = self.conf.clone()
         conf.batch_size = self.batch_size
 
-        dataloader = conf.make_loader(self.train_data,
-                                      shuffle=True,
-                                      drop_last=drop_last)
-        return dataloader
+        return conf.make_loader(self.train_data, shuffle=True, drop_last=drop_last)
 
     def train_dataloader(self):
         """
@@ -204,27 +194,26 @@ class LitModel(pl.LightningModule):
         if latent mode => return the inferred latent dataset
         """
         print('on train dataloader start ...')
-        if self.conf.train_mode.require_dataset_infer():
-            if self.conds is None:
-                # usually we load self.conds from a file
-                # so we do not need to do this again!
-                self.conds = self.infer_whole_dataset()
-                # need to use float32! unless the mean & std will be off!
-                # (1, c)
-                self.conds_mean.data = self.conds.float().mean(dim=0,
-                                                               keepdim=True)
-                self.conds_std.data = self.conds.float().std(dim=0,
-                                                             keepdim=True)
-            print('mean:', self.conds_mean.mean(), 'std:',
-                  self.conds_std.mean())
-
-            # return the dataset with pre-calculated conds
-            conf = self.conf.clone()
-            conf.batch_size = self.batch_size
-            data = TensorDataset(self.conds)
-            return conf.make_loader(data, shuffle=True)
-        else:
+        if not self.conf.train_mode.require_dataset_infer():
             return self._train_dataloader()
+        if self.conds is None:
+            # usually we load self.conds from a file
+            # so we do not need to do this again!
+            self.conds = self.infer_whole_dataset()
+            # need to use float32! unless the mean & std will be off!
+            # (1, c)
+            self.conds_mean.data = self.conds.float().mean(dim=0,
+                                                           keepdim=True)
+            self.conds_std.data = self.conds.float().std(dim=0,
+                                                         keepdim=True)
+        print('mean:', self.conds_mean.mean(), 'std:',
+              self.conds_std.mean())
+
+        # return the dataset with pre-calculated conds
+        conf = self.conf.clone()
+        conf.batch_size = self.batch_size
+        data = TensorDataset(self.conds)
+        return conf.make_loader(data, shuffle=True)
 
     @property
     def batch_size(self):
@@ -342,10 +331,7 @@ class LitModel(pl.LightningModule):
                     conds.append(cond[argsort].cpu())
                 # break
         model.train()
-        # (N, c) cpu
-
-        conds = torch.cat(conds).float()
-        return conds
+        return torch.cat(conds).float()
 
     def training_step(self, batch, batch_idx):
         """
@@ -423,10 +409,7 @@ class LitModel(pl.LightningModule):
                 ema(self.model, self.ema_model, self.conf.ema_decay)
 
             # logging
-            if self.conf.train_mode.require_dataset_infer():
-                imgs = None
-            else:
-                imgs = batch['img']
+            imgs = None if self.conf.train_mode.require_dataset_infer() else batch['img']
             self.log_sample(x_start=imgs)
             self.evaluate_scores()
 
@@ -449,11 +432,11 @@ class LitModel(pl.LightningModule):
         put images to the tensorboard
         """
         def do(model,
-               postfix,
-               use_xstart,
-               save_real=False,
-               no_latent_diff=False,
-               interpolate=False):
+                   postfix,
+                   use_xstart,
+                   save_real=False,
+                   no_latent_diff=False,
+                   interpolate=False):
             model.eval()
             with torch.no_grad():
                 all_x_T = self.split_tensor(self.x_T)
@@ -463,11 +446,7 @@ class LitModel(pl.LightningModule):
 
                 Gen = []
                 for x_T in loader:
-                    if use_xstart:
-                        _xstart = x_start[:len(x_T)]
-                    else:
-                        _xstart = None
-
+                    _xstart = x_start[:len(x_T)] if use_xstart else None
                     if self.conf.train_mode.is_latent_diffusion(
                     ) and not use_xstart:
                         # diffusion of the latent first
@@ -631,7 +610,6 @@ class LitModel(pl.LightningModule):
             # lpips(self.ema_model, '_ema')
 
     def configure_optimizers(self):
-        out = {}
         if self.conf.optimizer == OptimizerType.adam:
             optim = torch.optim.Adam(self.model.parameters(),
                                      lr=self.conf.lr,
@@ -642,7 +620,7 @@ class LitModel(pl.LightningModule):
                                       weight_decay=self.conf.weight_decay)
         else:
             raise NotImplementedError()
-        out['optimizer'] = optim
+        out = {'optimizer': optim}
         if self.conf.warmup > 0:
             sched = torch.optim.lr_scheduler.LambdaLR(optim,
                                                       lr_lambda=WarmupLR(
@@ -686,14 +664,10 @@ class LitModel(pl.LightningModule):
         "infer" = predict the latent variables using the encoder on the whole dataset
         """
         if 'infer' in self.conf.eval_programs:
-            if 'infer' in self.conf.eval_programs:
-                print('infer ...')
-                conds = self.infer_whole_dataset().float()
-                # NOTE: always use this path for the latent.pkl files
-                save_path = f'checkpoints/{self.conf.name}/latent.pkl'
-            else:
-                raise NotImplementedError()
-
+            print('infer ...')
+            conds = self.infer_whole_dataset().float()
+            # NOTE: always use this path for the latent.pkl files
+            save_path = f'checkpoints/{self.conf.name}/latent.pkl'
             if self.global_rank == 0:
                 conds_mean = conds.mean(dim=0)
                 conds_std = conds.std(dim=0)
@@ -893,12 +867,7 @@ def train(conf: TrainConfig, gpus, nodes=1, mode: str = 'train'):
         resume = checkpoint_path
         print('resume!')
     else:
-        if conf.continue_from is not None:
-            # continue from a checkpoint
-            resume = conf.continue_from.path
-        else:
-            resume = None
-
+        resume = conf.continue_from.path if conf.continue_from is not None else None
     tb_logger = pl_loggers.TensorBoardLogger(save_dir=conf.logdir,
                                              name=None,
                                              version='')

@@ -43,10 +43,7 @@ def space_timesteps(num_timesteps, section_counts):
         if size < section_count:
             raise ValueError(
                 f"cannot divide section of {size} steps into {section_count}")
-        if section_count <= 1:
-            frac_stride = 1
-        else:
-            frac_stride = (size - 1) / (section_count - 1)
+        frac_stride = 1 if section_count <= 1 else (size - 1) / (section_count - 1)
         cur_idx = 0.0
         taken_steps = []
         for _ in range(section_count):
@@ -155,6 +152,5 @@ class _WrappedModel:
     def __getattr__(self, name):
         # allow for calling the model's methods
         if hasattr(self.model, name):
-            func = getattr(self.model, name)
-            return func
+            return getattr(self.model, name)
         raise AttributeError(name)

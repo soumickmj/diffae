@@ -205,31 +205,30 @@ class TrainConfig(BaseConfig):
         return f'{self.work_cache_dir}/gen_images/{self.name}'
 
     def _make_diffusion_conf(self, T=None):
-        if self.diffusion_type == 'beatgans':
-            # can use T < self.T for evaluation
-            # follows the guided-diffusion repo conventions
-            # t's are evenly spaced
-            if self.beatgans_gen_type == GenerativeType.ddpm:
-                section_counts = [T]
-            elif self.beatgans_gen_type == GenerativeType.ddim:
-                section_counts = f'ddim{T}'
-            else:
-                raise NotImplementedError()
-
-            return SpacedDiffusionBeatGansConfig(
-                gen_type=self.beatgans_gen_type,
-                model_type=self.model_type,
-                betas=get_named_beta_schedule(self.beta_scheduler, self.T),
-                model_mean_type=self.beatgans_model_mean_type,
-                model_var_type=self.beatgans_model_var_type,
-                loss_type=self.beatgans_loss_type,
-                rescale_timesteps=self.beatgans_rescale_timesteps,
-                use_timesteps=space_timesteps(num_timesteps=self.T,
-                                              section_counts=section_counts),
-                fp16=self.fp16,
-            )
+        if self.diffusion_type != 'beatgans':
+            raise NotImplementedError()
+        # can use T < self.T for evaluation
+        # follows the guided-diffusion repo conventions
+        # t's are evenly spaced
+        if self.beatgans_gen_type == GenerativeType.ddpm:
+            section_counts = [T]
+        elif self.beatgans_gen_type == GenerativeType.ddim:
+            section_counts = f'ddim{T}'
         else:
             raise NotImplementedError()
+
+        return SpacedDiffusionBeatGansConfig(
+            gen_type=self.beatgans_gen_type,
+            model_type=self.model_type,
+            betas=get_named_beta_schedule(self.beta_scheduler, self.T),
+            model_mean_type=self.beatgans_model_mean_type,
+            model_var_type=self.beatgans_model_var_type,
+            loss_type=self.beatgans_loss_type,
+            rescale_timesteps=self.beatgans_rescale_timesteps,
+            use_timesteps=space_timesteps(num_timesteps=self.T,
+                                          section_counts=section_counts),
+            fp16=self.fp16,
+        )
 
     def _make_latent_diffusion_conf(self, T=None):
         # can use T < self.T for evaluation
@@ -286,11 +285,7 @@ class TrainConfig(BaseConfig):
             return FFHQlmdb(path=path or self.data_path,
                             image_size=self.img_size,
                             **kwargs)
-        elif self.data_name == 'horse256':
-            return Horse_lmdb(path=path or self.data_path,
-                              image_size=self.img_size,
-                              **kwargs)
-        elif self.data_name == 'bedroom256':
+        elif self.data_name in ['horse256', 'bedroom256']:
             return Horse_lmdb(path=path or self.data_path,
                               image_size=self.img_size,
                               **kwargs)

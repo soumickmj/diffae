@@ -17,21 +17,14 @@ def resize_and_convert(img, size, resample, quality=100):
     img = trans_fn.center_crop(img, size)
     buffer = BytesIO()
     img.save(buffer, format="jpeg", quality=quality)
-    val = buffer.getvalue()
-
-    return val
+    return buffer.getvalue()
 
 
 def resize_multiple(img,
                     sizes=(128, 256, 512, 1024),
                     resample=Image.LANCZOS,
                     quality=100):
-    imgs = []
-
-    for size in sizes:
-        imgs.append(resize_and_convert(img, size, resample, quality))
-
-    return imgs
+    return [resize_and_convert(img, size, resample, quality) for size in sizes]
 
 
 def resize_worker(img_file, sizes, resample):
@@ -89,8 +82,7 @@ class ImageFolder(Dataset):
 
     def __getitem__(self, index):
         path = os.path.join(self.folder, self.paths[index])
-        img = Image.open(path)
-        return img
+        return Image.open(path)
 
 
 if __name__ == "__main__":
@@ -106,7 +98,7 @@ if __name__ == "__main__":
 
     sizes = [256]
 
-    print(f"Make dataset of image sizes:", ", ".join(str(s) for s in sizes))
+    print("Make dataset of image sizes:", ", ".join(str(s) for s in sizes))
 
     # imgset = datasets.ImageFolder(in_path)
     # imgset = ImageFolder(in_path)

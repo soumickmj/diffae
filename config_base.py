@@ -42,9 +42,8 @@ class BaseConfig:
             if not hasattr(self, k):
                 if strict:
                     raise ValueError(f"loading extra '{k}'")
-                else:
-                    print(f"loading extra '{k}'")
-                    continue
+                print(f"loading extra '{k}'")
+                continue
             if isinstance(self.__dict__[k], BaseConfig):
                 self.__dict__[k].from_dict(v)
             else:
@@ -55,12 +54,8 @@ class BaseConfig:
         for k, v in self.__dict__.items():
             if isinstance(v, BaseConfig):
                 conf[k] = v.as_dict_jsonable()
-            else:
-                if jsonable(v):
-                    conf[k] = v
-                else:
-                    # ignore not jsonable
-                    pass
+            elif jsonable(v):
+                conf[k] = v
         return conf
 
 

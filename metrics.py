@@ -129,7 +129,7 @@ def evaluate_lpips(
             # (n, )
             scores['psnr'].append(psnr(norm_imgs, norm_pred_imgs))
         # (N, )
-        for key in scores.keys():
+        for key in scores:
             scores[key] = torch.cat(scores[key]).float()
     model.train()
 
@@ -139,15 +139,15 @@ def evaluate_lpips(
     outs = {
         key: [
             torch.zeros(len(scores[key]), device=device)
-            for i in range(get_world_size())
+            for _ in range(get_world_size())
         ]
-        for key in scores.keys()
+        for key in scores
     }
-    for key in scores.keys():
+    for key in scores:
         all_gather(outs[key], scores[key])
 
     # final scores
-    for key in scores.keys():
+    for key in scores:
         scores[key] = torch.cat(outs[key]).mean().item()
 
     # {'lpips', 'mse', 'ssim'}

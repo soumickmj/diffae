@@ -79,8 +79,6 @@ class BeatGANsAutoencModel(BeatGANsUNetModel):
 
     def noise_to_cond(self, noise: Tensor):
         raise NotImplementedError()
-        assert self.conf.noise_net_conf is not None
-        return self.noise_net.forward(noise)
 
     def encode(self, x):
         cond = self.encoder.forward(x)
@@ -112,11 +110,7 @@ class BeatGANsAutoencModel(BeatGANsUNetModel):
                 s = module.cond_emb_layers.forward(cond)
                 S.append(s)
 
-        if return_vector:
-            # (n, sum_c)
-            return torch.cat(S, dim=1)
-        else:
-            return S
+        return torch.cat(S, dim=1) if return_vector else S
 
     def forward(self,
                 x,
@@ -207,7 +201,7 @@ class BeatGANsAutoencModel(BeatGANsUNetModel):
             # input blocks
             k = 0
             for i in range(len(self.input_num_blocks)):
-                for j in range(self.input_num_blocks[i]):
+                for _ in range(self.input_num_blocks[i]):
                     h = self.input_blocks[k](h,
                                              emb=enc_time_emb,
                                              cond=enc_cond_emb)
@@ -228,7 +222,7 @@ class BeatGANsAutoencModel(BeatGANsUNetModel):
         # output blocks
         k = 0
         for i in range(len(self.output_num_blocks)):
-            for j in range(self.output_num_blocks[i]):
+            for _ in range(self.output_num_blocks[i]):
                 # take the lateral connection from the same layer (in reserve)
                 # until there is no more, use None
                 try:
@@ -274,10 +268,6 @@ class TimeStyleSeperateEmbed(nn.Module):
         self.style = nn.Identity()
 
     def forward(self, time_emb=None, cond=None, **kwargs):
-        if time_emb is None:
-            # happens with autoenc training mode
-            time_emb = None
-        else:
-            time_emb = self.time_embed(time_emb)
+        time_emb = None if time_emb is None else self.time_embed(time_emb)
         style = self.style(cond)
         return EmbedReturn(emb=style, time_emb=time_emb, style=style)
