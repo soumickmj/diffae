@@ -164,11 +164,9 @@ class Predictor(BasePredictor):
         )[0]
         original_img = data[0]["img"]
 
-        model_output = []
         out_path = Path(tempfile.mkdtemp()) / "original_aligned.png"
         save_image(convert2rgb(original_img), str(out_path))
-        model_output.append(ModelOutput(image=out_path))
-
+        model_output = [ModelOutput(image=out_path)]
         out_path = Path(tempfile.mkdtemp()) / "manipulated_img.png"
         save_image(convert2rgb(manipulated_img, adjust_scale=False), str(out_path))
         model_output.append(ModelOutput(image=out_path))

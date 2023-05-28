@@ -22,8 +22,7 @@ def convert(x, format, quality=100):
     x = x.numpy()
     img = Image.fromarray(x)
     img.save(buffer, format=format, quality=quality)
-    val = buffer.getvalue()
-    return val
+    return buffer.getvalue()
 
 
 @contextmanager
@@ -127,5 +126,4 @@ class LMDBImageReader(Dataset):
             img_bytes = txn.get(key)
 
         buffer = BytesIO(img_bytes)
-        img = Image.open(buffer)
-        return img
+        return Image.open(buffer)

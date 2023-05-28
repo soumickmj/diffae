@@ -20,8 +20,7 @@ class ZipLoader:
         return len(self.loaders[0])
 
     def __iter__(self):
-        for each in zip(*self.loaders):
-            yield each
+        yield from zip(*self.loaders)
 
 
 class ClsModel(pl.LightningModule):
@@ -85,20 +84,14 @@ class ClsModel(pl.LightningModule):
         for k, v in super().state_dict(*args, **kwargs).items():
             if k.startswith('model.'):
                 pass
-            elif k.startswith('ema_model.'):
-                pass
-            else:
+            elif not k.startswith('ema_model.'):
                 out[k] = v
         return out
 
     def load_state_dict(self, state_dict, strict: bool = None):
-        if self.conf.train_mode == TrainMode.manipulate:
             # change the default strict => False
-            if strict is None:
-                strict = False
-        else:
-            if strict is None:
-                strict = True
+        if strict is None:
+            strict = self.conf.train_mode != TrainMode.manipulate
         return super().load_state_dict(state_dict, strict=strict)
 
     def normalize(self, cond):
@@ -188,10 +181,10 @@ class ClsModel(pl.LightningModule):
         conf = self.conf.clone()
         conf.batch_size = self.batch_size
         if isinstance(self.train_data, list):
-            dataloader = []
-            for each in self.train_data:
-                dataloader.append(
-                    conf.make_loader(each, shuffle=True, drop_last=True))
+            dataloader = [
+                conf.make_loader(each, shuffle=True, drop_last=True)
+                for each in self.train_data
+            ]
             dataloader = ZipLoader(dataloader)
         else:
             dataloader = conf.make_loader(self.train_data,
@@ -301,12 +294,7 @@ def train_cls(conf: TrainConfig, gpus):
     if os.path.exists(checkpoint_path):
         resume = checkpoint_path
     else:
-        if conf.continue_from is not None:
-            # continue from a checkpoint
-            resume = conf.continue_from.path
-        else:
-            resume = None
-
+        resume = conf.continue_from.path if conf.continue_from is not None else None
     tb_logger = pl_loggers.TensorBoardLogger(save_dir=conf.logdir,
                                              name=None,
                                              version='')

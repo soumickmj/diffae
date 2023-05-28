@@ -113,8 +113,7 @@ class BaseLMDB(Dataset):
             img_bytes = txn.get(key)
 
         buffer = BytesIO(img_bytes)
-        img = Image.open(buffer)
-        return img
+        return Image.open(buffer)
 
 
 def make_transform(
@@ -157,7 +156,7 @@ class FFHQlmdb(Dataset):
             self.offset = 0
         elif split == 'train':
             # last 60k
-            self.length = self.length - 10000
+            self.length -= 10000
             self.offset = 10000
         elif split == 'test':
             # first 10k
@@ -202,8 +201,10 @@ class Crop:
                            self.y2 - self.y1)
 
     def __repr__(self):
-        return self.__class__.__name__ + "(x1={}, x2={}, y1={}, y2={})".format(
-            self.x1, self.x2, self.y1, self.y2)
+        return (
+            self.__class__.__name__
+            + f"(x1={self.x1}, x2={self.x2}, y1={self.y1}, y2={self.y2})"
+        )
 
 
 def d2c_crop():

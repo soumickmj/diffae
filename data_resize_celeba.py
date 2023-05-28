@@ -23,21 +23,14 @@ def resize_and_convert(img, size, resample, quality=100):
 
     buffer = BytesIO()
     img.save(buffer, format="webp", quality=quality)
-    val = buffer.getvalue()
-
-    return val
+    return buffer.getvalue()
 
 
 def resize_multiple(img,
                     sizes=(128, 256, 512, 1024),
                     resample=Image.LANCZOS,
                     quality=100):
-    imgs = []
-
-    for size in sizes:
-        imgs.append(resize_and_convert(img, size, resample, quality))
-
-    return imgs
+    return [resize_and_convert(img, size, resample, quality) for size in sizes]
 
 
 def resize_worker(idx, img, sizes, resample):
@@ -56,14 +49,13 @@ class ConvertDataset(Dataset):
 
     def __getitem__(self, index):
         img = self.data[index]
-        bytes = resize_and_convert(img, self.size, Image.LANCZOS, quality=100)
-        return bytes
+        return resize_and_convert(img, self.size, Image.LANCZOS, quality=100)
 
 
 class ImageFolder(Dataset):
     def __init__(self, folder, ext='jpg'):
         super().__init__()
-        paths = sorted([p for p in Path(f'{folder}').glob(f'*.{ext}')])
+        paths = sorted(list(Path(f'{folder}').glob(f'*.{ext}')))
         self.paths = paths
 
     def __len__(self):
@@ -71,8 +63,7 @@ class ImageFolder(Dataset):
 
     def __getitem__(self, index):
         path = os.path.join(self.paths[index])
-        img = Image.open(path)
-        return img
+        return Image.open(path)
 
 
 if __name__ == "__main__":
